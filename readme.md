@@ -1,8 +1,6 @@
-# Eval selection
+# Eval equation with Sublime Text 3
 
-Evaluates selection as python code with sublime python. This is really rare used
-plugin that requires knowledge of sublime api. This plugin can also be used to
-study sublime api.
+With Sublime Text 3 and WolframAlpha you can now resolve equations easily.
 
 
 ### Installation
