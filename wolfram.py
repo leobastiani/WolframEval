@@ -1,6 +1,3 @@
-import sublime
-import sublime_plugin
-
 from urllib.request import Request, urlopen
 import threading
 import time
@@ -9,6 +6,15 @@ import re
 import sys
 from pprint import pprint
 from urllib.parse import quote
+
+
+DEBUG = sys.flags.debug or False
+def debug(*args):
+    '''funciona como print, mas só é executada se sys.flags.debug == 1'''
+    if not sys.flags.debug:
+        return ;
+    print(*args)
+
 
 
 class Download:
@@ -21,20 +27,21 @@ class Download:
         def runThread():
             req = Request(self.url)
             req.add_header('referer', 'https://products.wolframalpha.com/api/explorer/')
-            res = urlopen(req).read().decode('ISO-8859-1')
+            res = urlopen(req).read()
+            if DEBUG:
+                with open('debug.js', 'wb') as file:
+                    file.write(res)
+            res = res.decode('ISO-8859-1')
             if self.killed:
                 return
             self.cb(res)
 
-        self.t = threading.Thread(target=runThread)
-        self.t.start()
+        t = threading.Thread(target=runThread)
+        t.start()
 
 
     def kill(self):
         self.killed = True
-
-    def join(self):
-        self.t.join()
 
 
 
@@ -45,14 +52,19 @@ class Wolfram(Download):
     def __init__(self, eq, cb):
 
         # vamos analisar a entrada
-        reVariable = r'[a-zA-z]\w*'
+        reVariable = r'\b[a-zA-z]\w*\b'
 
         # se tiver variaveis
         variableList = [
             # nome da variável 0,
             # nome da variável 1,
             # ...
-        ];
+        ]
+
+        # vamos retirar os \n e por ,
+        eq = eq.replace(' ', '')
+        eq = re.sub(r'[\n\r\t]+', ', ', eq)
+
         if re.search(reVariable, eq):
             allVariables = set(re.findall(reVariable, eq))
             def removeVariable(v):
@@ -88,6 +100,9 @@ class Wolfram(Download):
                 o = re.sub(r'\bx'+str(i)+r'\b', v, o)
                 i += 1
 
+            o = re.sub(r'(\w)\?(\w)', r'\1!=\2', o)
+            o = o.replace('?', '')
+
             return o
 
         def downloadCb(res):
@@ -97,43 +112,21 @@ class Wolfram(Download):
 
             res = res['queryresult']
             pods = res['pods']
-            for pod in pods:
-                if pod['id'] in ['Result', 'Solution', 'SymbolicSolution']:
-                    return cb(', '.join(set([stdOutput(x['moutput']) for x in pod['subpods']])))
-
-                elif pod['id'] == 'DecimalApproximation':
-                    return cb(pod['subpods'][0]['plaintext'].replace('?', ''))
+            ids = [x['id'] for x in pods]
+            for id in ['DecimalApproximation', 'Result', 'Solution', 'SymbolicSolution']:
+                for pod in pods:
+                    if pod['id'] != id:
+                        continue
+                    #  estou no id
+                    for result in ['moutput', 'plaintext']:
+                        if result not in pod['subpods'][0]:
+                            continue
+                        return cb(', '.join(set([stdOutput(x[result]) for x in pod['subpods']])))
 
             # não foi encontrado nada
             return cb(None)
 
+        # atualiza o eq
+        self.eqEfetiva = eq
         Download.__init__(self, "https://www.wolframalpha.com/input/apiExplorer.jsp?input="+quote(eq)+"&format=moutput,plaintext&output=JSON&type=full", downloadCb)
 
-
-
-class WolframSublime(Wolfram):
-    def __init__(self, edit, view, region):
-        self.edit = edit
-        self.view = view
-        self.region = region
-        self.content = self.view.substr(region)
-        Wolfram.__init__(self, self.content, self.wolframCb)
-
-    def wolframCb(self, res):
-        self.result = res
-
-
-class WolframEval(sublime_plugin.TextCommand):
-
-    def run(self, edit):
-        # todos os wolframs sublimes
-        ws = []
-        for region in self.view.sel():
-            if not region.empty():
-                ws.append(WolframSublime(edit, self.view, region))
-
-        # faz os joins
-        for w in ws:
-            w.join()
-            if w.result is not None:
-                w.view.replace(w.edit, w.region, w.result)
