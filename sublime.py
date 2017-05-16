@@ -20,10 +20,15 @@ class WolframSublime(Wolfram):
         self.view = view
         self.region = region
         self.content = self.view.substr(region)
+
+        # posição de inicio
         Wolfram.__init__(self, self.content, self.wolframCb)
 
     def wolframCb(self, res):
         self.result = res
+
+    def newRegion(self, d):
+        return sublime.Region(self.region.a + d, self.region.b + d)
 
 
 class WolframEval(sublime_plugin.TextCommand):
@@ -38,5 +43,12 @@ class WolframEval(sublime_plugin.TextCommand):
         # faz os joins
         for ws in wolframSublimes:
             ws.join()
+
+
+        # o valor de d é um diferencial que vamos adotar
+        # pra cada letra inserida
+        d = 0
+        for ws in wolframSublimes:
             if ws.result is not None:
-                ws.view.replace(ws.edit, ws.region, ws.result)
+                ws.view.replace(ws.edit, ws.newRegion(d), ws.result)
+                d += len(ws.result) - (ws.region.b - ws.region.a)

@@ -36,12 +36,16 @@ class Download:
                 return
             self.cb(res)
 
-        t = threading.Thread(target=runThread)
-        t.start()
+        self.t = threading.Thread(target=runThread)
+        self.t.start()
 
 
     def kill(self):
         self.killed = True
+
+
+    def join(self):
+        self.t.join()
 
 
 
@@ -61,14 +65,11 @@ class Wolfram(Download):
             # ...
         ]
 
-        # vamos retirar os \n e por ,
-        eq = eq.replace(' ', '')
-        eq = re.sub(r'[\n\r\t]+', ', ', eq)
 
         if re.search(reVariable, eq):
             allVariables = set(re.findall(reVariable, eq))
             def removeVariable(v):
-                if v in ['pi', 'e', 'E']: return True
+                if v in ['pi', 'e', 'E', 'mod']: return True
                 return False
 
             allVariables = [x for x in allVariables if not removeVariable(x)]
@@ -77,6 +78,10 @@ class Wolfram(Download):
                 eq = re.sub(r'\b'+v+r'\b', 'x'+str(len(variableList)), eq)
                 variableList.append(v)
 
+
+        # vamos retirar os \n e por ,
+        eq = eq.replace(' ', '')
+        eq = re.sub(r'[\n\r\t]+', ', ', eq)
 
 
         reVirgularVariable = r',\s*('+reVariable+r')$'
@@ -113,7 +118,7 @@ class Wolfram(Download):
             res = res['queryresult']
             pods = res['pods']
             ids = [x['id'] for x in pods]
-            for id in ['DecimalApproximation', 'Result', 'Solution', 'SymbolicSolution']:
+            for id in ['Result', 'DecimalApproximation', 'Solution', 'SymbolicSolution']:
                 for pod in pods:
                     if pod['id'] != id:
                         continue
@@ -121,7 +126,11 @@ class Wolfram(Download):
                     for result in ['moutput', 'plaintext']:
                         if result not in pod['subpods'][0]:
                             continue
-                        return cb(', '.join(set([stdOutput(x[result]) for x in pod['subpods']])))
+                        resWolfram = ', '.join(set([stdOutput(x[result]) for x in pod['subpods']]))
+                        if '(irreducible)' in resWolfram:
+                            # não quero resultados com irreducible
+                            continue
+                        return cb(resWolfram)
 
             # não foi encontrado nada
             return cb(None)
