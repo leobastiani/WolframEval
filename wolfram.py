@@ -19,19 +19,22 @@ def debug(*args):
 
 class Download:
 
-    def __init__(self, url, cb):
+    def __init__(self, url, cb, headers={}):
         self.cb = cb
         self.url = url
         self.killed = False
         
         def runThread():
             req = Request(self.url)
-            req.add_header('referer', 'https://products.wolframalpha.com/api/explorer/')
+
+            for h in headers:
+                req.add_header(h, headers[h])
+
             res = urlopen(req).read()
             if DEBUG:
                 with open('debug.js', 'wb') as file:
                     file.write(res)
-            res = res.decode('ISO-8859-1')
+            res = res.decode('UTF-8')
             if self.killed:
                 return
             self.cb(res)
@@ -56,7 +59,7 @@ class Wolfram(Download):
     def __init__(self, eq, cb):
 
         # vamos analisar a entrada
-        reVariable = r'\b[a-zA-z]\w*\b'
+        reVariable = r'\b[a-zA-Z]\w*\b'
 
         # se tiver variaveis
         variableList = [
@@ -105,8 +108,7 @@ class Wolfram(Download):
                 o = re.sub(r'\bx'+str(i)+r'\b', v, o)
                 i += 1
 
-            o = re.sub(r'(\w)\?(\w)', r'\1!=\2', o)
-            o = o.replace('?', '')
+            o = o.replace('', '=')
 
             return o
 
@@ -137,5 +139,11 @@ class Wolfram(Download):
 
         # atualiza o eq
         self.eqEfetiva = eq
-        Download.__init__(self, "https://www.wolframalpha.com/input/apiExplorer.jsp?input="+quote(eq)+"&format=moutput,plaintext&output=JSON&type=full", downloadCb)
+        quoted = quote(eq)
+        Download.__init__(self, 'http://www.wolframalpha.com/input/json.jsp?async=true&format=plaintext,moutput&input='+quoted+'&output=JSON&proxycode=1c5688ba025555b8ba89fdef96ff665a&scantimeout=0.5', downloadCb, {
+            'referer': 'http://www.wolframalpha.com/input/?i='+quoted,
+            # 'Accept-Language': 'pt-BR,pt;q=0.8',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36',
+            'Accept': 'application/json, text/plain, */*',
+        })
 
